@@ -1,4 +1,5 @@
 import aiohttp
+from aiohttp_retry import RetryClient
 import asyncio
 import os
 import re
@@ -13,7 +14,7 @@ class Downloader(object):
                                 help='Path to the folder where downloaded urls will be cached. To disable cache, delete the folder.')
 
     def create_session(self):
-        return aiohttp.ClientSession()
+        return RetryClient()
 
     def prepare_cache(self, args):
         self.cache_dir = args.downloader_cache_dir
@@ -38,24 +39,42 @@ class Downloader(object):
         with open(self.cache_key(url), 'w') as url_cache:
             url_cache.write(contents)
 
+    async def try_to_download(self, session, url):
+        async with session.get(url, retry_attempts=3) as res:
+            if res.status is not 200:
+                print('Error fetching {}, staus={}'.format(url, res.status))
+            return await res.text()
+
+
     async def download(self, session, url, result_queue):
+        first_try = True
+        for _ in range(2):
+            try:
+                contents = await self.try_to_download(session, url)
+                if self.use_cache():
+                    self.put_cache(url, contents)
+                await result_queue.put((url, contents))
+            except aiohttp.ServerDisconnectedError:
+                if not first_try:
+                    print('Failed to download {}. Repeated server disconnected error'.format(url))
+                    await result_queue.put((url, None))
+                    return
+                first_try = False
+                print('Server disconnected, we might have hit a crawler blocker. Sleep and try again.')
+                await asyncio.sleep(10)
+
+    async def download_or_cache(self, session, url, result_queue):
         if self.has_cache(url):
             print('Found cache entry for {}'.format(url))
             await result_queue.put((url, self.get_cache(url)))
             return
         print('Downloading {}'.format(url))
-        res = await session.get(url)
-        if res.status is not 200:
-            print('Error fetching {}, staus={}'.format(url, res.status))
-        contents = await res.text()
-        if self.use_cache():
-            self.put_cache(url, contents)
-        await result_queue.put((url, contents))
+        await self.download(session, url, result_queue)
 
     async def download_all(self, urls, consumer_fn):
         results_queue = asyncio.Queue()
         async with self.create_session() as download_session:
-            downloaders = [asyncio.create_task(self.download(download_session, url, results_queue)) for url in urls]
+            downloaders = [asyncio.create_task(self.download_or_cache(download_session, url, results_queue)) for url in urls]
             consumer = asyncio.create_task(consumer_fn(results_queue))
             await asyncio.gather(*downloaders)
             await results_queue.join()

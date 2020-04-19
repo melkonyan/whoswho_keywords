@@ -21,6 +21,8 @@ class WhoswhoCrawler(object):
         while True:
             url, contents = await result_queue.get()
             print('Parsing {}'.format(url))
+            if contents is None:
+                continue
             html_tree = html.fromstring(contents)
             self.researchers_per_url[url] = html_tree.xpath('//*[@id="content"]/div/div[2]/ul/li/h2/a/text()')
             result_queue.task_done()
