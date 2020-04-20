@@ -33,16 +33,17 @@ class KeywordsExtractor(object):
         keywords = [keyword for keyword in keywords if not self.is_redundant(keyword, keywords)]
         return keywords
 
-def extract_keywords(papers, extractor: KeywordsExtractor):
+def extract_keywords(papers, extractor: KeywordsExtractor, num):
     merged_titles = {id: ' '.join(researcher['papers']) for id, researcher in papers.items()}
     all_titles = ' '.join(merged_titles.values())
-    return extractor.keywords(all_titles, num=400)
+    return extractor.keywords(all_titles, num=num)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Compute potential keywords from a set of papers')
     parser.add_argument('--in', dest='input', help='Path to file containing crawled paper titles', default='papers.json')
     parser.add_argument('--out', dest='output', help='Path to the file where to store keywords', default='aging_keywords.txt')
+    parser.add_argument('--num', dest='num', type=int, help='Number of keyword candidates to produce', default=400)
     tokenizer = Tokenizer()
     tokenizer.register_options(parser)
     args = parser.parse_args()
@@ -50,5 +51,5 @@ if __name__ == '__main__':
     extractor = KeywordsExtractor(tokenizer.tokenize)
     with open(args.input, 'r') as input, open(args.output, 'w') as output:
         papers = json.load(input)
-        aging_keywords = extract_keywords(papers, extractor)
+        aging_keywords = extract_keywords(papers, extractor, args.num)
         output.write('\n'.join(aging_keywords))
