@@ -46,9 +46,9 @@ class PubmedCrawler(object):
 
 async def main():
     crawler = PubmedCrawler()
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('--in', dest='input', help='Path to the input json file', default='researchers.json')
-    parser.add_argument('--out', dest='output', help='Path to the json output file', default='papers.json')
+    parser = argparse.ArgumentParser(description='Download pubmed paper titles for a set of researchers')
+    parser.add_argument('--in', dest='input', help='Path to a json file containing researchers whose papers should be downloaded', default='researchers.json')
+    parser.add_argument('--out', dest='output', help='Path to a json file where to store crawled papers', default='papers.json')
     crawler.register_options(parser)
     args = parser.parse_args()
     # TODO: figure out how to print special charaters properly (e.g. beta)

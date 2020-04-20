@@ -40,7 +40,7 @@ def extract_keywords(papers, extractor: KeywordsExtractor):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser = argparse.ArgumentParser(description='Compute potential keywords from a set of papers')
     parser.add_argument('--in', dest='input', help='Path to file containing crawled paper titles', default='papers.json')
     parser.add_argument('--out', dest='output', help='Path to the file where to store keywords', default='aging_keywords.txt')
     tokenizer = Tokenizer()

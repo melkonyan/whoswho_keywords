@@ -47,8 +47,8 @@ class WhoswhoCrawler(object):
 
 async def main():
     crawler = WhoswhoCrawler()
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('--out', dest='output', help='Path to the json output file', default='researchers.json')
+    parser = argparse.ArgumentParser(description='Crawl reseachers')
+    parser.add_argument('--out', dest='output', help='Path to a json where to store crawled information', default='researchers.json')
     parser.add_argument('--num', type=int, dest='num_researchers', help='How many researchers to download', default=50)
     crawler.register_options(parser)
     args = parser.parse_args()

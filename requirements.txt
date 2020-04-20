@@ -2,5 +2,4 @@ argparse
 aiohttp
 aiohttp-retry
 lxml
-rake-nltk
 nltk
