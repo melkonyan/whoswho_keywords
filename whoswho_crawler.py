@@ -17,19 +17,16 @@ class WhoswhoCrawler(object):
     def register_options(self, argparser):
         self.downloader.register_options(argparser)
 
-    async def parse(self, result_queue):
-        while True:
-            url, contents = await result_queue.get()
-            print('Parsing {}'.format(url))
-            if contents is None:
-                continue
-            html_tree = html.fromstring(contents)
-            self.researchers_per_url[url] = html_tree.xpath('//*[@id="content"]/div/div[2]/ul/li/h2/a/text()')
-            result_queue.task_done()
+    async def parse(self, url, contents):
+        if contents is None:
+            return
+        print('Parsing {}'.format(url))
+        html_tree = html.fromstring(contents)
+        self.researchers_per_url[url] = html_tree.xpath('//*[@id="content"]/div/div[2]/ul/li/h2/a/text()')
 
     async def crawl(self, args, num_researchers):
         self.researchers_per_url = {}
-        self.downloader.prepare_cache(args)
+        self.downloader.prepare(args)
         num_pages = int(math.ceil(num_researchers / self.RESEARCHERS_PER_PAGE))
         page_urls = [self.URL_PATTERN.format(page_num) for page_num in range(1, num_pages+1)]
         await self.downloader.download_all(page_urls, self.parse)
