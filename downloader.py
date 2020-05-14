@@ -5,6 +5,7 @@ import os
 import re
 import heapq
 from datetime import datetime, timedelta
+import logging
 
 MAX_FILE_NAME_LEN = 250
 ONE_SEC = timedelta(seconds=1)
@@ -76,6 +77,8 @@ class Downloader(object):
             return url_cache.read()
 
     def put_cache(self, url, contents):
+        if not contents:
+            return
         with open(self.cache_key(url), 'w') as url_cache:
             url_cache.write(contents)
 
@@ -87,16 +90,14 @@ class Downloader(object):
                 sleep_time = self.download_history.oldest_record() + ONE_SEC - curr_time
                 await asyncio.sleep(sleep_time.total_seconds())
             self.download_history.add_record(datetime.now())
-            print('Downloading {}'.format(url))
+            logging.info('Downloading {}'.format(url))
             async with session.get(url, retry_attempts=2) as res:
                 if res.status == 429:
-                    print('Service returned status 429, trying to recover. Consider adjusting download throttle')
-                    self.download_paused = True
-                    await asyncio.sleep(10)
-                    self.download_paused = False
-                    return await self.try_to_download(session, url)
+                    logging.warning('Service returned status 429, trying to recover. Consider adjusting download throttle')
+                    await asyncio.sleep(1)
+                    return None
                 elif not res.status == 200:
-                    print('Error fetching {}, staus={}'.format(url, res.status))
+                    logging.warning('Error fetching {}, staus={}'.format(url, res.status))
                     return None
                 return await res.text()
 
@@ -106,15 +107,15 @@ class Downloader(object):
             contents = await self.try_to_download(session, url)
             if self.use_cache():
                 self.put_cache(url, contents)
-            print('Download finished for {}'.format(url))
+            logging.info('Download finished for {}'.format(url))
             await result_queue.put((url, contents))
         except aiohttp.ServerDisconnectedError as err:
-            print('Failed to download {}. Repeated server disconnected error'.format(url))
+            logging.error('Failed to download {}. Repeated server disconnected error'.format(url))
             await result_queue.put((url, None))
 
     async def download_or_cache(self, session, url, result_queue):
         if self.has_cache(url):
-            print('Found cache entry for {}'.format(url))
+            logging.info('Found cache entry for {}'.format(url))
             await result_queue.put((url, self.get_cache(url)))
             return
         await self.download(session, url, result_queue)
@@ -130,7 +131,7 @@ class Downloader(object):
         if self.semaphore is None:
             self.semaphore = asyncio.Semaphore(self.qps)
         if not self.args_registered:
-            print('Warning: Downloader.prepare was not called')
+            logging.warning('Downloader.prepare was not called')
         results_queue = asyncio.Queue()
 
         async def consumer():

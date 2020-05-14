@@ -3,3 +3,5 @@ aiohttp
 aiohttp-retry
 lxml
 nltk
+xmltodict
+tqdm

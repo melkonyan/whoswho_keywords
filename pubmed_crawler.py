@@ -1,12 +1,25 @@
 import json
 import argparse
 import asyncio
+import os
+import logging
 from lxml import html
 from downloader import Downloader
+import xmltodict
+import traceback
+from tqdm import tqdm
+
+LOGS_DIR = 'logs'
+LOG_FILE = 'logs/pubmed.log'
+PAPER_LIST_URL_PATTERN = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&tool=github.com/melkonyan/whoswho_keywords&email=sasha.melkonyan+crawler@gmail.com&retmax=300&term={name}%20{surname}%20aging&format=json&{api_key}'
+PAPER_DETAILS_URL_PATTERN = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={id}&tool=github.com/melkonyan/whoswho_keywords&email=sasha.melkonyan+crawler@gmail.com&format=xml&{api_key}'
 
 
-
-URL_PATTERN = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&tool=github.com/melkonyan/whoswho_keywords&email=sasha.melkonyan+crawler@gmail.com&retmax=300&term={name}%20{surname}%20aging&format=json&{api_key}'
+def setup_logging():
+    if not os.path.exists(LOGS_DIR):
+        os.makedirs(LOGS_DIR)
+    with open(LOG_FILE, 'w'): pass
+    logging.basicConfig(filename=LOG_FILE, filemode='w', level=logging.INFO)
 
 class PubmedCrawler(object):
 
@@ -21,31 +34,68 @@ class PubmedCrawler(object):
         surname, name = name.split(', ')
         return {'surname': surname, 'name': name}
 
-    async def parse(self, url, contents):
+    def format_api_key(self):
+        return 'api_key='+self.api_key if self.api_key else ''
+
+    async def parse_details(self, url, contents):
+        if contents is None:
+            return
+        try:
+            d = xmltodict.parse(contents)
+            paper_id = d['PubmedArticleSet']['PubmedArticle']['MedlineCitation']['PMID']['#text']
+            researcher_id = self.researcher_id_for_paper[paper_id]
+            self.papers[researcher_id]['papers'][paper_id] = d
+        except Exception as ex:
+            print('Failed to parse url {}'.format(url))
+            traceback.print_exc()
+
+    async def parse_papers(self, url, contents):
         if contents is None:
             return
         print('Parsing {}'.format(url))
         try:
+            researcher_id = self.researcher_id_for_url[url]
             paper_ids = json.loads(contents).get('esearchresult', {}).get('idlist', [])
+            self.papers[researcher_id]['paper_ids'] = paper_ids
             print('Done parsing')
-            self.papers_per_url[url] = paper_ids
         except Exception as ex:
             print('Failed to parse {}'.format(url))
-            self.papers_per_url[url] = []
+            traceback.print_exc()
+
+    async def crawl_paper_details(self):
+        print(list(self.papers.values())[0]['paper_ids'])
+        total_num_papers = sum([len(papers['paper_ids']) for papers in self.papers.values()])
+        progress = tqdm(total=total_num_papers)
+        num_crawled = 0
+        for researcher_id, papers in self.papers.items():
+            paper_ids = papers['paper_ids']
+            paper_details_url = [PAPER_DETAILS_URL_PATTERN.format(
+                api_key = self.format_api_key(),
+                id = id) for id in paper_ids
+            ]
+            for id in paper_ids:
+                self.researcher_id_for_paper[id] = researcher_id
+            await self.downloader.download_all(paper_details_url, self.parse_details)
+            num_crawled += len(paper_ids)
+            progress.update(len(paper_ids))
+        progress.close()
 
     async def crawl(self, researchers, args):
         self.api_key = args.api_key
         self.downloader.prepare(args)
-        self.papers_per_url = {}
-        paper_urls = {id: URL_PATTERN.format(
-            api_key='api_key='+self.api_key if self.api_key else '', **self.format_name(name))
+        paper_urls = {id: PAPER_LIST_URL_PATTERN.format(
+            api_key=self.format_api_key(), **self.format_name(name))
             for id, name in list(researchers.items())}
-        await self.downloader.download_all(paper_urls.values(), self.parse)
-        papers = {id:
-            {'researcher': researchers[id], 'papers': self.papers_per_url[url]}
-            for id, url in paper_urls.items() if url in self.papers_per_url.keys()}
-        print('Successfully crawled papers for {} out of {} researchers'.format(len(researchers), len(papers)))
-        return papers
+        self.papers = {
+            id: {'researcher': researchers[id], 'papers': {}, 'paper_ids': []}
+            for id, url in paper_urls.items()
+        }
+        self.researcher_id_for_url = {url: id for id, url in paper_urls.items()}
+        self.researcher_id_for_paper = {}
+        await self.downloader.download_all(paper_urls.values(), self.parse_papers)
+        await self.crawl_paper_details()
+        print('Done')
+        return self.papers
 
 
 async def main():
@@ -55,6 +105,7 @@ async def main():
     parser.add_argument('--out', dest='output', help='Path to a json file where to store crawled papers', default='papers.json')
     crawler.register_options(parser)
     args = parser.parse_args()
+    setup_logging()
     with open(args.input, 'r') as input, open(args.output, 'w') as output:
         researchers = json.load(input)
         papers = await crawler.crawl(researchers, args)
