@@ -55,7 +55,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Find keywords in a set of papers')
     parser.add_argument('--in', dest='input', help='Path to the json file containing crawled papers', default='papers.json')
     parser.add_argument('--out', dest='output', help='Path to the csv file where to store found keywords', default='keywords.csv')
-    parser.add_argument(    '--max_keywords', dest='max_keywords', type=int, help='Maximum number of keywords to assign a researcher', default=5)
+    parser.add_argument('--max_keywords', dest='max_keywords', type=int, help='Maximum number of keywords to assign a researcher', default=5)
 
     tokenizer = Tokenizer()
     tokenizer.register_options(parser)
@@ -78,7 +78,7 @@ if __name__ == '__main__':
         processor = PubmedProcessor(papers, tokenizer.tokenize)
         keywords = find_keywords(finder, processor, max_num_keywords=args.max_keywords)
         keywords_csv = [
-            ';'.join([id, k['researcher'], ', '.join([format(kw) for kw in k['keywords']])])
+            ';'.join([id, k['researcher'], '; '.join([format(kw) for kw in k['keywords']])])
             for id, k in keywords.items()
         ]
         output.write('\n'.join(keywords_csv))

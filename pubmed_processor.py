@@ -52,7 +52,7 @@ class PubmedProcessor:
                     traceback.print_exc()
             if 'KeywordList' in medline.keys():
                 try:
-                    other_keywords += [kw['#text'].lower() for kw in self._maybe_list(medline['KeywordList']['Keyword'])]
+                    other_keywords += [self._maybe_str(kw).lower() for kw in self._maybe_list(medline['KeywordList']['Keyword'])]
                 except Exception as ex:
                     print(paper_details)
                     traceback.print_exc()

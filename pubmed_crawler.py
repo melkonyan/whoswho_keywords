@@ -27,8 +27,14 @@ class PubmedCrawler(object):
         self.downloader = Downloader()
 
     def register_options(self, argparser):
-        argparser.add_argument('--api_key', help='', default=None)
+        argparser.add_argument('--no-details', dest='fetch_details', action='store_false', help='Only parse list of paper ids for each researcher, dont download each paper contents.', default=True)
+        argparser.add_argument('--api_key', help='Pubmed API key. For more details on how to get one, see https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities', default=None)
         self.downloader.register_options(argparser)
+
+    def prepare(self, args):
+        self.api_key = args.api_key
+        self.fetch_details = args.fetch_details
+        self.downloader.prepare(args)
 
     def format_name(self, name):
         surname, name = name.split(', ')
@@ -80,9 +86,7 @@ class PubmedCrawler(object):
             progress.update(len(paper_ids))
         progress.close()
 
-    async def crawl(self, researchers, args):
-        self.api_key = args.api_key
-        self.downloader.prepare(args)
+    async def crawl(self, researchers):
         paper_urls = {id: PAPER_LIST_URL_PATTERN.format(
             api_key=self.format_api_key(), **self.format_name(name))
             for id, name in list(researchers.items())}
@@ -93,7 +97,8 @@ class PubmedCrawler(object):
         self.researcher_id_for_url = {url: id for id, url in paper_urls.items()}
         self.researcher_id_for_paper = {}
         await self.downloader.download_all(paper_urls.values(), self.parse_papers)
-        await self.crawl_paper_details()
+        if self.fetch_details:
+            await self.crawl_paper_details()
         print('Done')
         return self.papers
 
@@ -105,10 +110,11 @@ async def main():
     parser.add_argument('--out', dest='output', help='Path to a json file where to store crawled papers', default='papers.json')
     crawler.register_options(parser)
     args = parser.parse_args()
+    crawler.prepare(args)   
     setup_logging()
     with open(args.input, 'r') as input, open(args.output, 'w') as output:
         researchers = json.load(input)
-        papers = await crawler.crawl(researchers, args)
+        papers = await crawler.crawl(researchers)
         json.dump(papers, output, )
 
 if __name__ == '__main__':
