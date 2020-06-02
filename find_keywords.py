@@ -19,24 +19,35 @@ class KeywordsFinder(object):
             self.keywords_list = aging_keywords.read().split('\n')
         self.keyword_threshold = args.keyword_threshold
 
+    def count_appearances(self, keyword: str, tokens_dict: dict) -> int:
+        return sum(keyword in tokens for tokens in tokens_dict.values())
+
     def keywords(self, tokens):
-        keyword_counts = [(k, tokens.count(k)) for k in self.keywords_list if tokens.count(k) >= self.keyword_threshold]
+        """
+        Given a dict of paper tokens returns a list of keywords that appear in
+        at least `keyword_threshold` papers.
+        """
+        keyword_counts = [(k, self.count_appearances(k, tokens)) for k in self.keywords_list]
+        keyword_counts = [(k, num) for (k, num) in keyword_counts if num >= self.keyword_threshold]
         keyword_counts = sorted(keyword_counts, key=lambda kw_count: -kw_count[1])
         if len(keyword_counts) == 0:
-            return []
+            return ()
         keywords, counts = zip(*keyword_counts)
         return keywords
 
-def find_keywords(finder, processor, max_num_keywords=5):
-    merged_titles = {id: ' '.join(titles) for id, titles in processor.extract_title_tokens().items()}
-    merged_meshes = {id: ' '.join(meshes) for id, meshes in processor.extract_mesh_tokens().items()}
-    keywords = {id: (finder.keywords(merged_titles[id] + ' ' + merged_meshes[id])[:max_num_keywords])
-                    for id in papers.keys()}
+def find_keywords(finder, papers, max_num_keywords=5):
+    paper_tokens = {res_id:
+                    {paper_id:
+                        set(info['title'] + info['meshes'])
+                        for paper_id, info in res_info['papers'].items()
+                    } for res_id, res_info in papers.items()
+                  }
+    keywords = {res_id: finder.keywords(tokens_dict)[:max_num_keywords]
+                    for (res_id, tokens_dict) in paper_tokens.items()}
     # remove potential duplicates.
     keywords = {id: list(set(kw)) for id, kw in keywords.items()}
-    names = processor.extract_researcher_names()
     keywords = {
-        id: {'researcher': names[id], 'keywords': keywords[id]}
+        id: {'researcher': papers[id]['researcher'], 'keywords': keywords[id]}
         for id in keywords.keys()
     }
     return keywords
@@ -53,7 +64,7 @@ def filter_generics(finder, keywords, unique_threshold = 10):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Find keywords in a set of papers')
-    parser.add_argument('--in', dest='input', help='Path to the json file containing crawled papers', default='papers.json')
+    parser.add_argument('--in', dest='input', help='Path to the json file containing crawled papers', default='processed_papers.json')
     parser.add_argument('--out', dest='output', help='Path to the csv file where to store found keywords', default='keywords.csv')
     parser.add_argument('--max_keywords', dest='max_keywords', type=int, help='Maximum number of keywords to assign a researcher', default=5)
 
@@ -75,10 +86,9 @@ if __name__ == '__main__':
     with open(args.input, 'r') as input, \
          open(args.output, 'w') as output:
         papers = json.load(input)
-        processor = PubmedProcessor(papers, tokenizer.tokenize)
-        keywords = find_keywords(finder, processor, max_num_keywords=args.max_keywords)
+        keywords = find_keywords(finder, papers, max_num_keywords=args.max_keywords)
         keywords_csv = [
-            ';'.join([id, k['researcher'], '; '.join([format(kw) for kw in k['keywords']])])
+            ';'.join([id, k['researcher'], ';', '; '.join([format(kw) for kw in k['keywords']])])
             for id, k in keywords.items()
         ]
         output.write('\n'.join(keywords_csv))

@@ -1,0 +1,12 @@
+=AND(
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),4,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),5,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),6,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),7,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),8,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),9,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),10,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),11,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),12,))),
+D1<>(Indirect("'Title+Mesh Keywords'!"&Address(Row(),13,)))
+)
